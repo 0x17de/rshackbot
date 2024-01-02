@@ -9,7 +9,7 @@ async fn main() {
     let chat = tokio::spawn(async move {
         let (ws, _) = tokio_tungstenite::connect_async("wss://hack.chat/chat-ws").await
             .expect("failed to connect");
-        let (mut write, read) = ws.split();
+        let (write, read) = ws.split();
         let reader = read.for_each(|res| async {
             match res {
                 Err(e) => eprintln!("failed to read message: {}", e),
