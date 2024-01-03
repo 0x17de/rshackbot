@@ -2,8 +2,9 @@ use std::sync::Arc;
 use tokio::{time::{sleep, Duration}, task::JoinHandle};
 use futures_util::{StreamExt, pin_mut, SinkExt, lock::Mutex as FutureMutex};
 use serde_json::json;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+use crate::msg_parser::{Parseable, Message};
 use crate::config::Args;
 
 pub struct Client {
@@ -23,7 +24,16 @@ impl Client {
         }
     }
 
-    pub async fn run(&mut self) -> JoinHandle<()> {
+    pub async fn handle(&self, msg: &Message) {
+        match msg {
+            Message::Chat(chat) => {
+                println!("<{}> {}", chat.sender, chat.message);
+            },
+            Message::Unknown => {},
+        }
+    }
+
+    pub async fn run(self: Arc<Self>) -> JoinHandle<()> {
         let server = self.server.clone();
         let channel = self.channel.clone();
         let username = self.username.clone();
@@ -37,11 +47,23 @@ impl Client {
             let ping_write = write.clone();
 
             // read loop
+            let reader_self = self.clone();
             let reader = tokio::spawn(async move {
-                while let Some(msg) = read.next().await {
-                    let msg = msg.unwrap();
-                    if let Ok(text) = msg.into_text() {
-                        println!("TEXT {}", text);
+                while let Some(frame) = read.next().await {
+                    let frame = frame.unwrap();
+                    if let Ok(text) = frame.into_text() {
+                        let res = text.parse();
+                        match res {
+                            Err(e) => {
+                                eprintln!("failed to parse: {}; {}", e, text);
+                            }
+                            Ok(Message::Unknown) => {
+                                println!("unknown message: {}", text);
+                            }
+                            Ok(msg) => {
+                                reader_self.handle(&msg).await;
+                            }
+                        }
                     }
                 }
             });
@@ -51,7 +73,7 @@ impl Client {
                 loop {
                     sleep(Duration::from_secs(60)).await;
                     let ping_msg = "Ping!"; // Your ping message here
-                    ping_write.lock().await.send(Message::Ping(ping_msg.into())).await.expect("Failed to send ping");
+                    ping_write.lock().await.send(WsMessage::Ping(ping_msg.into())).await.expect("Failed to send ping");
                 }
             });
 
@@ -62,7 +84,7 @@ impl Client {
                 "nick": username,
                 "password": password,
             }).to_string();
-            write.lock().await.send(Message::Text(msg)).await.expect("failed to send");
+            write.lock().await.send(WsMessage::Text(msg)).await.expect("failed to send");
 
             pin_mut!(reader, pinger);
             tokio::select!{
