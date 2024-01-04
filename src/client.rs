@@ -31,10 +31,14 @@ impl Client {
         }
     }
 
-    pub async fn chat(&self, text: String) {
+    pub async fn json(&self, data: String) {
         if let Some(write) = self.write.lock().await.as_mut() {
-            let _ = write.send(WsMessage::Text(json!({"cmd": "chat", "text": text}).to_string())).await;
+            let _ = write.send(WsMessage::Text(data)).await;
         }
+    }
+
+    pub async fn chat(&self, text: String) {
+        self.json(json!({"cmd": "chat", "text": text}).to_string()).await;
     }
 
     pub async fn handle_cmd(&self, _msg: &Message, cmd: &Command) {
