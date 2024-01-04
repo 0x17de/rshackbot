@@ -7,6 +7,7 @@ use crate::config::Args;
 mod client;
 mod config;
 mod msg_parser;
+mod cmd;
 
 #[tokio::main]
 async fn main() {

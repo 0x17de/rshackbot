@@ -1,18 +1,23 @@
 use std::sync::Arc;
-use tokio::{time::{sleep, Duration}, task::JoinHandle};
-use futures_util::{StreamExt, pin_mut, SinkExt, lock::Mutex as FutureMutex};
+use tokio::{time::{sleep, Duration}, task::JoinHandle, net::TcpStream};
+use futures_util::{StreamExt, pin_mut, SinkExt, lock::Mutex as FutureMutex, stream::SplitSink};
 use serde_json::json;
-use tokio_tungstenite::tungstenite::Message as WsMessage;
+use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream, MaybeTlsStream};
 
 use crate::msg_parser::{Parseable, Message};
 use crate::config::Args;
+use crate::cmd::{ParseableCommand, Command};
 
 pub struct Client {
     server: String,
     channel: String,
     username: String,
     password: String,
+
+    write: Arc<FutureMutex<Option<Write>>>,
 }
+
+type Write = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, WsMessage>;
 
 impl Client {
     pub fn new(args: Args) -> Client {
@@ -21,6 +26,23 @@ impl Client {
             channel: args.channel,
             username: args.username,
             password: args.password,
+
+            write: Arc::new(FutureMutex::new(None)),
+        }
+    }
+
+    pub async fn chat(&self, text: String) {
+        if let Some(write) = self.write.lock().await.as_mut() {
+            let _ = write.send(WsMessage::Text(json!({"cmd": "chat", "text": text}).to_string())).await;
+        }
+    }
+
+    pub async fn handle_cmd(&self, _msg: &Message, cmd: &Command) {
+        match cmd {
+            Command::Kick(kick) => {
+                println!("Found kick");
+                self.chat(format!("Would kick {}", kick.target)).await;
+            }
         }
     }
 
@@ -28,6 +50,13 @@ impl Client {
         match msg {
             Message::Chat(chat) => {
                 println!("<{}> {}", chat.sender, chat.message);
+
+                if chat.message.starts_with("::") {
+                    let rest = &chat.message[2..];
+                    if let Some(cmd) = rest.parse_cmd() {
+                        self.handle_cmd(msg, &cmd).await;
+                    }
+                }
             },
             Message::Unknown => {},
         }
@@ -42,25 +71,25 @@ impl Client {
             let (ws, _) = tokio_tungstenite::connect_async(server).await
                 .expect("failed to connect");
             let (write, mut read) = ws.split();
-
-            let write = Arc::new(FutureMutex::new(write));
-            let ping_write = write.clone();
+            let _ = self.write.lock().await.insert(write);
 
             // read loop
             let reader_self = self.clone();
             let reader = tokio::spawn(async move {
                 while let Some(frame) = read.next().await {
                     let frame = frame.unwrap();
-                    if let Ok(text) = frame.into_text() {
-                        match text.parse() {
-                            Err(e) => {
-                                eprintln!("failed to parse: {}; {}", e, text);
-                            }
-                            Ok(Message::Unknown) => {
-                                println!("unknown message: {}", text);
-                            }
-                            Ok(msg) => {
-                                reader_self.handle(&msg).await;
+                    if !frame.is_empty() && frame.is_text() {
+                        if let Ok(text) = frame.into_text() {
+                            match text.parse() {
+                                Err(e) => {
+                                    eprintln!("failed to parse: {}; {}", e, text);
+                                }
+                                Ok(Message::Unknown) => {
+                                    println!("unknown message: {}", text);
+                                }
+                                Ok(msg) => {
+                                    reader_self.handle(&msg).await;
+                                }
                             }
                         }
                     }
@@ -68,10 +97,13 @@ impl Client {
             });
 
             // ping every minute
+            let pinger_self = self.clone();
             let pinger = tokio::spawn(async move {
                 loop {
                     sleep(Duration::from_secs(60)).await;
-                    ping_write.lock().await.send(WsMessage::Ping("ping".into())).await.expect("Failed to send ping");
+                    if let Some(write) = pinger_self.write.lock().await.as_mut() {
+                        write.send(WsMessage::Text(json!({"cmd": "ping"}).to_string())).await.expect("Failed to send ping");
+                    }
                 }
             });
 
@@ -82,7 +114,9 @@ impl Client {
                 "nick": username,
                 "password": password,
             }).to_string();
-            write.lock().await.send(WsMessage::Text(msg)).await.expect("failed to send");
+            if let Some(write) = self.write.lock().await.as_mut() {
+                write.send(WsMessage::Text(msg)).await.expect("failed to send");
+            }
 
             pin_mut!(reader, pinger);
             tokio::select!{
