@@ -7,6 +7,9 @@ use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream, Mayb
 use crate::msg_parser::{Parseable, Message};
 use crate::config::Args;
 use crate::cmd::{ParseableCommand, Command};
+use crate::user::User;
+
+type ArcFM<T> = Arc<FutureMutex<T>>;
 
 pub struct Client {
     server: String,
@@ -14,7 +17,8 @@ pub struct Client {
     username: String,
     password: String,
 
-    write: Arc<FutureMutex<Option<Write>>>,
+    write: ArcFM<Option<Write>>,
+    userlist: ArcFM<Vec<Arc<User>>>,
 }
 
 type Write = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, WsMessage>;
@@ -28,11 +32,13 @@ impl Client {
             password: args.password,
 
             write: Arc::new(FutureMutex::new(None)),
+            userlist: Arc::new(FutureMutex::new(Vec::new())),
         }
     }
 
     pub async fn json(&self, data: String) {
-        if let Some(write) = self.write.lock().await.as_mut() {
+        let mut lock = self.write.lock().await;
+        if let Some(write) = lock.as_mut() {
             let _ = write.send(WsMessage::Text(data)).await;
         }
     }
@@ -41,11 +47,29 @@ impl Client {
         self.json(json!({"cmd": "chat", "text": text}).to_string()).await;
     }
 
+    pub async fn get_user(&self, username: &str) -> Option<Arc<User>> {
+        let lock = self.userlist.lock().await;
+        lock.iter().find(|x| x.username == username).cloned()
+    }
+
     pub async fn handle_cmd(&self, _msg: &Message, cmd: &Command) {
         match cmd {
+            Command::Users(_) => {
+                let userlist = self.userlist.lock().await;
+                let Some(users) = userlist.iter()
+                    .map(|x| x.username.clone())
+                    .reduce(|a, b| a + ", " + &b) else {
+                        return;
+                    };
+                self.chat(format!("Users: {users}")).await;
+            }
             Command::Kick(kick) => {
                 println!("Found kick");
-                self.chat(format!("Would kick {}", kick.target)).await;
+                if let Some(user) = self.get_user(&kick.target).await {
+                    self.chat(format!("Would kick {}", &user.username)).await;
+                } else {
+                    self.chat(format!("User not in userlist: {}", kick.target)).await;
+                }
             }
         }
     }
@@ -61,6 +85,15 @@ impl Client {
                     }
                 }
             },
+            Message::OnlineSet(online_set) => {
+                println!("Users: {:?}", online_set);
+                let mut lock = self.userlist.lock().await;
+                let userlist = &mut lock;
+                userlist.clear();
+                for user in &online_set.users {
+                    userlist.push(user.into())
+                }
+            }
             Message::Unknown => {},
         }
     }

@@ -8,6 +8,7 @@ mod client;
 mod config;
 mod msg_parser;
 mod cmd;
+mod user;
 
 #[tokio::main]
 async fn main() {
