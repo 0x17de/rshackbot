@@ -52,8 +52,7 @@ impl Client {
                 while let Some(frame) = read.next().await {
                     let frame = frame.unwrap();
                     if let Ok(text) = frame.into_text() {
-                        let res = text.parse();
-                        match res {
+                        match text.parse() {
                             Err(e) => {
                                 eprintln!("failed to parse: {}; {}", e, text);
                             }
@@ -72,8 +71,7 @@ impl Client {
             let pinger = tokio::spawn(async move {
                 loop {
                     sleep(Duration::from_secs(60)).await;
-                    let ping_msg = "Ping!"; // Your ping message here
-                    ping_write.lock().await.send(WsMessage::Ping(ping_msg.into())).await.expect("Failed to send ping");
+                    ping_write.lock().await.send(WsMessage::Ping("ping".into())).await.expect("Failed to send ping");
                 }
             });
 
