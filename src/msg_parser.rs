@@ -62,6 +62,7 @@ impl From<&MsgOnlineSetUser> for Arc<User> {
     fn from(value: &MsgOnlineSetUser) -> Self {
         Arc::new(User{
             username: value.username.clone(),
+            level: value.level,
         })
     }
 }
@@ -78,6 +79,7 @@ impl From<&MsgOnlineAdd> for Arc<User> {
     fn from(value: &MsgOnlineAdd) -> Self {
         Arc::new(User{
             username: value.username.clone(),
+            level: value.level,
         })
     }
 }
