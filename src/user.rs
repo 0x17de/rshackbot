@@ -1,5 +1,6 @@
 #[repr(i32)]
-enum Level {
+#[allow(unused)]
+pub enum Level {
     Default = 100,
     Trusted = 500,
     ChanTrusted = 8999,
