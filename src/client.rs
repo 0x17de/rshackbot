@@ -55,8 +55,7 @@ impl Client {
             Message::Chat(chat) => {
                 println!("<{}> {}", chat.sender, chat.message);
 
-                if chat.message.starts_with("::") {
-                    let rest = &chat.message[2..];
+                if let Some(rest) = chat.message.strip_prefix("::") {
                     if let Some(cmd) = rest.parse_cmd() {
                         self.handle_cmd(msg, &cmd).await;
                     }
@@ -82,19 +81,17 @@ impl Client {
             let reader = tokio::spawn(async move {
                 while let Some(frame) = read.next().await {
                     let frame = frame.unwrap();
-                    if !frame.is_empty() && frame.is_text() {
-                        if let Ok(text) = frame.into_text() {
-                            match text.parse() {
-                                Err(e) => {
-                                    eprintln!("failed to parse: {}; {}", e, text);
-                                }
-                                Ok(Message::Unknown) => {
-                                    println!("unknown message: {}", text);
-                                }
-                                Ok(msg) => {
-                                    reader_self.handle(&msg).await;
-                                }
-                            }
+                    if !frame.is_empty() && frame.is_text() { continue };
+                    let Ok(text) = frame.into_text() else { continue };
+                    match text.parse() {
+                        Err(e) => {
+                            eprintln!("failed to parse: {}; {}", e, text);
+                        }
+                        Ok(Message::Unknown) => {
+                            println!("unknown message: {}", text);
+                        }
+                        Ok(msg) => {
+                            reader_self.handle(&msg).await;
                         }
                     }
                 }

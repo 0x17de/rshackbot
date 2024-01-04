@@ -1,5 +1,7 @@
-use clap::{Parser};
+use clap::Parser;
+use derive_more::From;
 
+#[derive(From)]
 pub enum Command {
     Kick(CmdKick),
 }
@@ -15,19 +17,12 @@ pub trait ParseableCommand {
 
 impl ParseableCommand for &str {
     fn parse_cmd(&self) -> Option<Command> {
-        if let Some(args) = shlex::split(self) {
-            let name = &args[0];
+        let args = shlex::split(self)?;
+        let name = &args[0];
 
-            return match name.to_lowercase().as_ref() {
-                "kick" => {
-                    match CmdKick::try_parse_from(args.iter()) {
-                        Ok(res) => { println!("parsed kick"); Some(Command::Kick(res)) },
-                        Err(e) => { println!("failed to parse cmd: {}", e); None },
-                    }
-                },
-                _ => None,
-            }
-        }
-        None
+        Some(match name.to_lowercase().as_ref() {
+            "kick" => CmdKick::try_parse_from(args.iter()).ok()?.into(),
+            &_ => todo!(),
+        })
     }
 }
