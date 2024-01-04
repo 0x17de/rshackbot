@@ -56,7 +56,10 @@ impl Client {
         match cmd {
             Command::Users(_) => {
                 let userlist = self.userlist.lock().await;
-                let Some(users) = userlist.iter()
+                // sort users by name
+                let mut users_cloned = userlist.clone();
+                users_cloned.sort_by(|a, b| b.username.cmp(&a.username));
+                let Some(users) = users_cloned.iter()
                     .map(|x| x.username.clone())
                     .reduce(|a, b| a + ", " + &b) else {
                         return;
@@ -94,6 +97,20 @@ impl Client {
                     userlist.push(user.into())
                 }
             }
+            Message::OnlineAdd(online_add) => {
+                println!("Joined: {:?}", online_add);
+                let mut lock = self.userlist.lock().await;
+                let userlist = &mut lock;
+                userlist.push(online_add.into())
+            }
+            Message::OnlineRemove(online_remove) => {
+                println!("Left: {:?}", online_remove);
+                let mut lock = self.userlist.lock().await;
+                let userlist = &mut lock;
+                if let Some(index) = userlist.iter().position(|x| x.username == online_remove.username) {
+                    userlist.remove(index);
+                }
+            },
             Message::Unknown => {},
         }
     }

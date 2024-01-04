@@ -26,6 +26,10 @@ pub enum Message {
     Chat(MsgChat),
     #[serde(rename = "onlineSet")]
     OnlineSet(MsgOnlineSet),
+    #[serde(rename = "onlineAdd")]
+    OnlineAdd(MsgOnlineAdd),
+    #[serde(rename = "onlineRemove")]
+    OnlineRemove(MsgOnlineRemove),
     #[serde(other)]
     Unknown,
 }
@@ -60,4 +64,26 @@ impl From<&MsgOnlineSetUser> for Arc<User> {
             username: value.username.clone(),
         })
     }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MsgOnlineAdd {
+    #[serde(rename = "nick")]
+    pub username: String,
+    pub trip: String,
+    pub level: i32,
+}
+
+impl From<&MsgOnlineAdd> for Arc<User> {
+    fn from(value: &MsgOnlineAdd) -> Self {
+        Arc::new(User{
+            username: value.username.clone(),
+        })
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MsgOnlineRemove {
+    #[serde(rename = "nick")]
+    pub username: String,
 }
