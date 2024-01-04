@@ -81,7 +81,7 @@ impl Client {
             let reader = tokio::spawn(async move {
                 while let Some(frame) = read.next().await {
                     let frame = frame.unwrap();
-                    if !frame.is_empty() && frame.is_text() { continue };
+                    if frame.is_empty() || !frame.is_text() { continue };
                     let Ok(text) = frame.into_text() else { continue };
                     match text.parse() {
                         Err(e) => {
