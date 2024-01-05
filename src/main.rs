@@ -13,9 +13,8 @@ mod user;
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let client = Arc::new(Client::new(args));
-    let runner = client.run().await;
-    if let Err(e) = tokio::try_join!(runner) {
-        eprintln!("failed to join: {}", e)
-    }
+    let mut client = Client::new(args);
+    client.connect().await;
+    let client = Arc::new(client);
+    client.run().await;
 }

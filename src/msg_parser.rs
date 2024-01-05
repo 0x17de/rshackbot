@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::io::Result as IOResult;
 
 use serde::{Deserialize, Deserializer};
@@ -90,12 +89,12 @@ pub struct MsgOnlineSetUser {
     pub level: i32,
 }
 
-impl From<&MsgOnlineSetUser> for Arc<User> {
+impl From<&MsgOnlineSetUser> for User {
     fn from(value: &MsgOnlineSetUser) -> Self {
-        Arc::new(User{
+        User{
             username: value.username.clone(),
             level: value.level,
-        })
+        }
     }
 }
 
@@ -107,12 +106,12 @@ pub struct MsgOnlineAdd {
     pub level: i32,
 }
 
-impl From<&MsgOnlineAdd> for Arc<User> {
+impl From<&MsgOnlineAdd> for User {
     fn from(value: &MsgOnlineAdd) -> Self {
-        Arc::new(User{
+        User{
             username: value.username.clone(),
             level: value.level,
-        })
+        }
     }
 }
 

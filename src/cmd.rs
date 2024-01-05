@@ -27,7 +27,7 @@ impl ParseableCommand for &str {
         Some(match name.to_lowercase().as_ref() {
             "kick" => CmdKick::try_parse_from(args.iter()).ok()?.into(),
             "users" => CmdUsers{}.into(),
-            &_ => todo!(),
+            &_ => return None,
         })
     }
 }

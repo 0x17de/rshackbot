@@ -10,6 +10,7 @@ pub enum Level {
     Admin = 9999999,
 }
 
+#[derive(Clone)]
 pub struct User {
     pub username: String,
     pub level: i32,
