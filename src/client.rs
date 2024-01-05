@@ -4,7 +4,7 @@ use futures_util::{StreamExt, pin_mut, SinkExt, lock::Mutex as FutureMutex, stre
 use serde_json::json;
 use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream, MaybeTlsStream};
 
-use crate::msg_parser::{Parseable, Message};
+use crate::msg_parser::{Parseable, Message, Info};
 use crate::config::Args;
 use crate::cmd::{ParseableCommand, Command};
 use crate::user::User;
@@ -111,6 +111,16 @@ impl Client {
                     userlist.remove(index);
                 }
             },
+            Message::Info(Info::Whisper(whisper)) => {
+                println!("<{}|whisper> {}", whisper.sender, whisper.message);
+
+                if let Some(rest) = whisper.message.strip_prefix("::") {
+                    if let Some(cmd) = rest.parse_cmd() {
+                        self.handle_cmd(msg, &cmd).await;
+                    }
+                }
+            },
+            Message::Info(Info::Unknown) => {},
             Message::Unknown => {},
         }
     }
