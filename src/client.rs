@@ -47,13 +47,13 @@ impl Client {
 }
 
 pub struct ClientRef {
-    client: Arc<FutureMutex<Client>>
+    client: FutureMutex<Client>
 }
 
 impl ClientRef {
     pub fn new(c: Client) -> Arc<ClientRef> {
         Arc::new(ClientRef{
-            client: Arc::new(FutureMutex::new(c)),
+            client: FutureMutex::new(c),
         })
     }
     
