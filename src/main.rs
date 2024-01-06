@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use clap::Parser;
+use futures_util::lock::Mutex as FutureMutex;
 
-use crate::client::Client;
+use crate::client::{Client, ClientRef};
 use crate::config::Args;
 
 mod client;
@@ -13,8 +14,6 @@ mod user;
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let mut client = Client::new(args);
-    client.connect().await;
-    let client = Arc::new(client);
+    let client = ClientRef::new(Client::new(args));
     client.run().await;
 }
