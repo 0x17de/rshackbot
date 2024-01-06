@@ -10,9 +10,9 @@ use crate::cmd::{ParseableCommand, Command};
 use crate::user::User;
 
 type ArcFM<T> = Arc<FutureMutex<T>>;
-type WSS = WebSocketStream<MaybeTlsStream<TcpStream>>;
-type Reader = SplitStream<WSS>;
-type Writer = SplitSink<WSS, WsMessage>;
+type Wss = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type Reader = SplitStream<Wss>;
+type Writer = SplitSink<Wss, WsMessage>;
 
 pub struct Client {
     server: String,
@@ -142,7 +142,7 @@ impl ClientRef {
     }
 
     pub async fn run(self: Arc<Self>) {
-        let mut this = self.client.lock().await;
+        let this = self.client.lock().await;
         let channel = this.channel.clone();
         let username = this.username.clone();
         let password = this.password.clone();

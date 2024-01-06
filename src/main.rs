@@ -1,6 +1,4 @@
-use std::sync::Arc;
 use clap::Parser;
-use futures_util::lock::Mutex as FutureMutex;
 
 use crate::client::{Client, ClientRef};
 use crate::config::Args;
