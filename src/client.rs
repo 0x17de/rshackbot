@@ -14,7 +14,7 @@ type Wss = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type Reader = SplitStream<Wss>;
 type Writer = SplitSink<Wss, WsMessage>;
 
-pub struct Client {
+struct State {
     #[allow(unused)]
     server: String,
     channel: String,
@@ -26,40 +26,50 @@ pub struct Client {
     userlist: Vec<User>,
 }
 
+pub struct Client {
+    state: FutureMutex<State>
+}
+
+pub struct ClientConfig {
+    server: String,
+    channel: String,
+    username: String,
+    password: String,
+}
+
+impl From<Args> for ClientConfig {
+    fn from(value: Args) -> Self {
+        ClientConfig {
+            server: value.server,
+            channel: value.channel,
+            username: value.username,
+            password: value.password,
+        }
+    }
+}
 
 impl Client {
-    pub async fn new(args: Args) -> Client {
-        let (ws, _) = tokio_tungstenite::connect_async(args.server.clone()).await
+    pub async fn new(config: &ClientConfig) -> Arc<Client> {
+        let (ws, _) = tokio_tungstenite::connect_async(config.server.clone()).await
             .expect("failed to connect");
         let (write, read) = ws.split();
 
-        Client{
-            server: args.server,
-            channel: args.channel,
-            username: args.username,
-            password: args.password,
+        Arc::new(Client{
+            state: FutureMutex::new(State{
+                server: config.server.clone(),
+                channel: config.channel.clone(),
+                username: config.username.clone(),
+                password: config.password.clone(),
 
-            read: Arc::new(FutureMutex::new(read)),
-            write,
-            userlist: Vec::new(),
-        }
-    }
-
-}
-
-pub struct ClientRef {
-    client: FutureMutex<Client>
-}
-
-impl ClientRef {
-    pub fn new(c: Client) -> Arc<ClientRef> {
-        Arc::new(ClientRef{
-            client: FutureMutex::new(c),
+                read: Arc::new(FutureMutex::new(read)),
+                write,
+                userlist: Vec::new(),
+            }),
         })
     }
     
     pub async fn json(&self, data: String) {
-        let _ = self.client.lock().await.write.send(WsMessage::Text(data)).await;
+        let _ = self.state.lock().await.write.send(WsMessage::Text(data)).await;
     }
 
     pub async fn chat(&self, text: String) {
@@ -67,16 +77,17 @@ impl ClientRef {
     }
 
     pub async fn get_user(&self, username: &str) -> Option<User> {
-        self.client.lock().await
+        let username_lower = username.to_lowercase();
+        self.state.lock().await
             .userlist.iter()
-            .find(|x| x.username == username)
+            .find(|x| x.username.to_lowercase() == username_lower)
             .cloned()
     }
 
     pub async fn handle_cmd(&self, _msg: &Message, cmd: &Command) {
         match cmd {
             Command::Users(_) => {
-                let mut userlist = self.client.lock().await
+                let mut userlist = self.state.lock().await
                     .userlist.clone();
                 userlist.sort_by(|a, b| b.username.cmp(&a.username));
                 let Some(users) = userlist.iter()
@@ -110,7 +121,7 @@ impl ClientRef {
             },
             Message::OnlineSet(online_set) => {
                 println!("Users: {:?}", online_set);
-                let userlist = &mut self.client.lock().await.userlist;
+                let userlist = &mut self.state.lock().await.userlist;
                 userlist.clear();
                 for user in &online_set.users {
                     userlist.push(user.into());
@@ -118,12 +129,12 @@ impl ClientRef {
             }
             Message::OnlineAdd(online_add) => {
                 println!("Joined: {:?}", online_add);
-                let userlist = &mut self.client.lock().await.userlist;
+                let userlist = &mut self.state.lock().await.userlist;
                 userlist.push(online_add.into());
             }
             Message::OnlineRemove(online_remove) => {
                 println!("Left: {:?}", online_remove);
-                let userlist = &mut self.client.lock().await.userlist;
+                let userlist = &mut self.state.lock().await.userlist;
                 if let Some(index) = userlist.iter().position(|x| x.username == online_remove.username) {
                     userlist.remove(index);
                 }
@@ -143,7 +154,7 @@ impl ClientRef {
     }
 
     pub async fn run(self: Arc<Self>) {
-        let this = self.client.lock().await;
+        let this = self.state.lock().await;
         let channel = this.channel.clone();
         let username = this.username.clone();
         let password = this.password.clone();
@@ -152,7 +163,7 @@ impl ClientRef {
         // read loop
         let reader_self = self.clone();
         let reader = tokio::spawn(async move {
-            let read = reader_self.client.lock().await.read.clone();
+            let read = reader_self.state.lock().await.read.clone();
             let mut read = read.lock().await;
             while let Some(frame) = read.next().await {
                 let frame = frame.unwrap();
@@ -178,7 +189,7 @@ impl ClientRef {
             loop {
                 sleep(Duration::from_secs(60)).await;
                 let msg = WsMessage::Text(json!({"cmd": "ping"}).to_string());
-                pinger_self.client.lock().await
+                pinger_self.state.lock().await
                     .write.send(msg).await
                     .expect("Failed to send ping");
             }
@@ -192,7 +203,7 @@ impl ClientRef {
             "password": password,
         }).to_string();
 
-        self.client.lock().await
+        self.state.lock().await
             .write.send(WsMessage::Text(msg)).await
             .expect("failed to send");
 

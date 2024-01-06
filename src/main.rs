@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use crate::client::{Client, ClientRef};
+use crate::client::Client;
 use crate::config::Args;
 
 mod client;
@@ -12,6 +12,6 @@ mod user;
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let client = ClientRef::new(Client::new(args).await);
+    let client = Client::new(&args.into()).await;
     client.run().await;
 }
