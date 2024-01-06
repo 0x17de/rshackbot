@@ -14,6 +14,6 @@ mod user;
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let client = ClientRef::new(Client::new(args));
+    let client = ClientRef::new(Client::new(args).await);
     client.run().await;
 }
