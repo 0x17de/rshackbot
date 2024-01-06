@@ -15,6 +15,7 @@ type Reader = SplitStream<Wss>;
 type Writer = SplitSink<Wss, WsMessage>;
 
 pub struct Client {
+    #[allow(unused)]
     server: String,
     channel: String,
     username: String,
