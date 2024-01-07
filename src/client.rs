@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tokio::{time::{sleep, Duration}, net::TcpStream};
+use tokio::{time::{sleep, Duration}, net::TcpStream, sync::mpsc::UnboundedReceiver};
 use futures_util::{StreamExt, pin_mut, SinkExt, lock::Mutex as FutureMutex, stream::{SplitSink, SplitStream}};
 use serde_json::json;
 use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream, MaybeTlsStream};
@@ -153,7 +153,7 @@ impl Client {
         }
     }
 
-    pub async fn run(self: Arc<Self>) {
+    pub async fn run(self: Arc<Self>, mut shutdown_recv: UnboundedReceiver<()>) {
         let this = self.state.lock().await;
         let channel = this.channel.clone();
         let username = this.username.clone();
@@ -208,9 +208,11 @@ impl Client {
             .expect("failed to send");
 
         pin_mut!(reader, pinger);
+
         tokio::select!{
             _ = &mut reader => {}
             _ = &mut pinger => {}
+            _ = shutdown_recv.recv() => {}
         }
 
         reader.abort();
