@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use tokio::{time::{sleep, Duration}, net::TcpStream, sync::mpsc::UnboundedReceiver};
+use tokio::{time::{sleep, Duration}, net::TcpStream};
 use futures_util::{StreamExt, pin_mut, SinkExt, lock::Mutex as FutureMutex, stream::{SplitSink, SplitStream}};
 use serde_json::json;
 use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream, MaybeTlsStream};
+use tokio_util::sync::CancellationToken;
 
 use crate::msg_parser::{Parseable, Message, Info};
 use crate::config::Args;
@@ -153,7 +154,7 @@ impl Client {
         }
     }
 
-    pub async fn run(self: Arc<Self>, mut shutdown_recv: UnboundedReceiver<()>) {
+    pub async fn run(self: Arc<Self>, token: CancellationToken) {
         let this = self.state.lock().await;
         let channel = this.channel.clone();
         let username = this.username.clone();
@@ -212,7 +213,7 @@ impl Client {
         tokio::select!{
             _ = &mut reader => {}
             _ = &mut pinger => {}
-            _ = shutdown_recv.recv() => {}
+            _ = token.cancelled() => {}
         }
 
         reader.abort();

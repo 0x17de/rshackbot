@@ -1,7 +1,8 @@
 use clap::Parser;
 use futures_util::pin_mut;
 use tokio::signal;
-use tokio::sync::mpsc::unbounded_channel;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::client::Client;
 use crate::config::Args;
@@ -14,22 +15,23 @@ mod user;
 
 #[tokio::main]
 async fn main() {
-    let (shutdown_send, shutdown_recv) = unbounded_channel();
+    let token = CancellationToken::new();
+    let tracker = TaskTracker::new();
     
     let args = Args::parse();
     let client = Client::new(&args.into()).await;
-    let runner = tokio::spawn(async move { client.run(shutdown_recv).await });
+    let runner_token = token.clone();
+    tracker.spawn(async move { client.run(runner_token).await });
 
-    pin_mut!(runner);
+    tracker.close();
+
     tokio::select! {
-        _ = &mut runner => {},
+        _ = tracker.wait() => {},
         _ = signal::ctrl_c() => {
             eprintln!("starting graceful termination");
-            let _ = shutdown_send.send(());
+            token.cancel();
         },
     }
 
-    if !runner.is_finished() {
-        let _ = tokio::join!(runner);
-    }
+    tracker.wait().await;
 }
